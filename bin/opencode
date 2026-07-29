@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_DIR="$(pwd -P)"
+export PROJECT_DIR
+
+STACK_DIR="$(
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1
+  pwd -P
+)"
+
+COMPOSE=(
+  docker compose
+  -f "$STACK_DIR/docker-compose.yml"
+  --env-file "$STACK_DIR/.env"
+)
+
+# Carrega os nomes de modelos do arquivo central de configuração.
+# O .env deve permanecer no formato dotenv simples definido acima.
+set -a
+# shellcheck disable=SC1091
+source "$STACK_DIR/.env"
+set +a
+: "${PRIMARY_MODEL:?PRIMARY_MODEL não definido em $STACK_DIR/.env}"
+: "${SMALL_MODEL:?SMALL_MODEL não definido em $STACK_DIR/.env}"
+
+# Inicia ou mantém o servidor Ollama em execução.
+"${COMPOSE[@]}" up -d --wait ollama
+
+# Só cria um container temporário de init se houver modelo ausente.
+model_exists() {
+  local model="$1"
+
+  "${COMPOSE[@]}" exec -T ollama ollama list \
+    | awk 'NR > 1 { print $1 }' \
+    | grep -Fxq "$model"
+}
+if ! model_exists "$PRIMARY_MODEL" || ! model_exists "$SMALL_MODEL"; then
+  echo "Inicializando modelos Ollama. Aguarde a conclusão dos downloads..."
+  #
+  # Registra o container de inicialização existente, se houver.
+  INIT_CONTAINER_BEFORE="$(
+    "${COMPOSE[@]}" ps -aq ollama-init 2>/dev/null || true
+  )"
+
+  # Cria ou atualiza o ollama-init conforme necessário.
+  "${COMPOSE[@]}" up -d ollama-init
+
+  # Obtém o ID após o Compose reconciliar a configuração.
+  INIT_CONTAINER_AFTER="$(
+    "${COMPOSE[@]}" ps -aq ollama-init
+  )"
+
+  # Só acompanha logs e espera caso o container foi criado ou recriado.
+  if [[ "$INIT_CONTAINER_BEFORE" != "$INIT_CONTAINER_AFTER" ]]; then
+
+    "${COMPOSE[@]}" logs -f ollama-init &
+    LOGS_PID=$!
+
+    # Aguarda o término do init e preserva seu código de saída.
+    set +e
+    "${COMPOSE[@]}" wait ollama-init
+    INIT_EXIT_CODE=$?
+    set -e
+
+    # Encerra o acompanhamento dos logs.
+    kill "$LOGS_PID" 2>/dev/null || true
+    wait "$LOGS_PID" 2>/dev/null || true
+
+    if [[ "$INIT_EXIT_CODE" -ne 0 ]]; then
+      echo "Falha ao inicializar os modelos Ollama." >&2
+      exit "$INIT_EXIT_CODE"
+    fi
+  fi
+fi
+
+
+# Neste ponto, os modelos já existem ou foram baixados com sucesso.
+# Conferir se existe pasta com arquivos de configuração do OpenCode no host.
+# Se houver, levar para dentro do container.
+EXTRA_ARGS=()
+if [ -d "$HOME/.config/opencode" ]; then
+  EXTRA_ARGS+=("-v" "$HOME/.config/opencode:/root/.config/opencode")
+fi
+"${COMPOSE[@]}" run --rm "${EXTRA_ARGS[@]}"  opencode "$@"
