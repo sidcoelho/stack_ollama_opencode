@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_DIR="$(pwd -P)"
+export PROJECT_DIR
+
+STACK_DIR="$(
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1
+  pwd -P
+)"
+
+COMPOSE=(
+  docker compose
+  -f "$STACK_DIR/docker-compose.yml"
+)
+
+# Conferir se existe pasta com arquivos de configuração do OpenCode no host.
+# Se houver, levar para dentro do container.
+EXTRA_ARGS=()
+if [ -d "$HOME/.config/opencode" ]; then
+  EXTRA_ARGS+=("-v" "$HOME/.config/opencode:/root/.config/opencode")
+fi
+"${COMPOSE[@]}" run --rm "${EXTRA_ARGS[@]}" opencode-abacus "$@"

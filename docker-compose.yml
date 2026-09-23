@@ -49,6 +49,7 @@ services:
     build:
       context: .
       dockerfile: ./images/dockerfile-opencode
+    container_name: opencode
     stdin_open: true
     tty: true
     depends_on:
@@ -85,3 +86,18 @@ services:
             }
           }
         }
+
+  opencode-abacus:
+    profiles: ["cli"]
+    build:
+      context: .
+      dockerfile: ./images/dockerfile-opencode
+    container_name: oc-abacus
+    entrypoint: ["/entrypoint.sh"]
+    command: ["opencode"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${PROJECT_DIR}:/contents
+      - ./bin/entrypoint-oc-abacus.sh:/entrypoint.sh
+    env_file: ".abacus.env.secrets"
