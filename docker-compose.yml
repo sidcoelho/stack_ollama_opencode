@@ -89,6 +89,7 @@ services:
 
   opencode-abacus:
     profiles: ["cli"]
+    image: opencode-abacus:1.0.0
     build:
       context: .
       dockerfile: ./images/dockerfile-opencode
