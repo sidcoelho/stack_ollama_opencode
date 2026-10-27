@@ -93,6 +93,9 @@ services:
     build:
       context: .
       dockerfile: ./images/dockerfile-opencode
+      args:
+        PUID: "${HOST_UID:-1000}"
+        PGID: "${HOST_GID:-1000}"
     container_name: oc-abacus
     entrypoint: ["/entrypoint.sh"]
     command: ["opencode"]
@@ -100,5 +103,12 @@ services:
     tty: true
     volumes:
       - ${PROJECT_DIR}:/contents
-      - ./bin/entrypoint-oc-abacus.sh:/entrypoint.sh
+      - ./bin/entrypoint-oc-abacus.sh:/entrypoint.sh:ro
+      - oc-config:/home/dev/.config/opencode               # <-- persistência de config
+      - oc-data:/home/dev/.local/share/opencode            # <-- persistência de dados/sessões
     env_file: ".abacus.env.secrets"
+
+# Declara os volumes nomeados (criados automaticamente pelo Docker)
+volumes:
+  oc-config:
+  oc-data:
