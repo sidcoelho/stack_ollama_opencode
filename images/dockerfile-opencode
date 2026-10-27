@@ -2,7 +2,7 @@ FROM ghcr.io/astral-sh/uv:python3.15-alpine3.23
 
 ENV TZ=America/Sao_Paulo
 
-# Dependências: curl e bash para o instalador; libgcc/libstdc++ para o binário em musl
+# Dependências
 RUN apk add --no-cache \
     bash \
     curl \
@@ -10,15 +10,29 @@ RUN apk add --no-cache \
     tzdata \
     libgcc \
     libstdc++ \
-    poppler-utils
+    poppler-utils \
+    git \
+    ripgrep
 
 # Faz o build falhar se qualquer parte de um pipe falhar
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Instala o opencode
-RUN curl -fsSL https://opencode.ai/install | bash
+# Prepara o usuário dev com o UID/GID do host
+ARG PUID=1000
+ARG PGID=1000
+RUN addgroup -g "$PGID" dev && \
+    adduser -D -u "$PUID" -G dev -h /home/dev dev
 
-ENV PATH="/root/.opencode/bin:${PATH}"
+USER dev
+
+# Cria os diretórios de config/dados do OpenCode como dev,
+# para que os volumes nomeados herdem o dono correto na primeira montagem
+RUN mkdir -p /home/dev/.config/opencode /home/dev/.local/share/opencode
+
+# Instala o opencode
+RUN curl -fsSL https://opencode.ai/v2/install | bash
+
+ENV PATH="/home/dev/.opencode/bin:${PATH}"
 
 # Valida a instalação (o build quebra aqui se o binário não existir ou não executar)
 RUN opencode --version
